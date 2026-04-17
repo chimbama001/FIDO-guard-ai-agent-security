@@ -40,7 +40,6 @@ Unlike simple function chains, real-world agents need **branching logic, persist
 ## Installation
 
 ```bash
-git clone <your-repo-url> langgraph-ts-workflow
 cd langgraph-ts-workflow
 npm install
 ```
