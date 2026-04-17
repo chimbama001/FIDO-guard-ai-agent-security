@@ -1,0 +1,40 @@
+{
+  "name": "langgraph-ts-workflow",
+  "version": "1.0.0",
+  "description": "LangGraph.js stateful agent workflows with checkpoints — TypeScript starter",
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "dev": "node ./node_modules/tsx/dist/cli.mjs src/index.ts",
+    "build": "node ./node_modules/typescript/bin/tsc -p tsconfig.json",
+    "prestart": "npm run build",
+    "start": "node dist/index.js",
+    "test": "node ./node_modules/vitest/vitest.mjs run",
+    "test:watch": "node ./node_modules/vitest/vitest.mjs",
+    "test:integration": "node ./node_modules/vitest/vitest.mjs run tests/integration.test.ts --passWithNoTests",
+    "test:checkpoint": "node ./node_modules/vitest/vitest.mjs run tests/checkpoint.test.ts"
+  },
+  "keywords": [
+    "langgraph",
+    "langchain",
+    "typescript",
+    "agents",
+    "workflow"
+  ],
+  "license": "MIT",
+  "dependencies": {
+    "@langchain/core": "^1.1.40",
+    "@langchain/langgraph": "^1.2.9",
+    "@langchain/openai": "^1.0.0",
+    "dotenv": "^16.4.7",
+    "zod": "^3.25.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.8.2",
+    "vitest": "^3.0.0"
+  }
+}
