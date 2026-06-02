@@ -25,15 +25,23 @@ export async function executionNode(
     const c = res.content;
     body = typeof c === "string" ? c : JSON.stringify(c);
   } else {
-    body = [
-      "### Result",
-      "",
-      `Goal: ${originalAsk.slice(0, 200)}${originalAsk.length > 200 ? "…" : ""}`,
-      "",
-      `Following the approved plan, the next step would be to carry out: ${plan.slice(0, 300)}…`,
-      "",
-      "_Mock execution (set `OPENAI_API_KEY` for a live run)._",
-    ].join("\n");
+   body = [
+  "## FIDO-Guard Execution Result",
+  "",
+  "**Status:** Approved and executed",
+  "**Action:** Rotate production AI API key and deploy new model version",
+  "**Target Resource:** Production Model API",
+  "**Approval Gate:** Passed",
+  "**Required Authentication:** FIDO2 security key or passkey",
+  "**Approver Role:** Cloud Admin",
+  "**Audit Status:** Logged",
+  "",
+  "The AI-agent action was executed only after verified human approval.",
+  "",
+  "In the final version, this approval step will require a phishing-resistant FIDO2/WebAuthn challenge before `approved` can become `true`.",
+  "",
+  "_FIDO-Guard mock execution mode._",
+].join("\n");
   }
 
   return {

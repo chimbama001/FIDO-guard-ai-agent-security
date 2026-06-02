@@ -37,7 +37,7 @@ async function main(): Promise<void> {
   const userLine = rest.join(" ").trim();
   const prompt =
     userLine ||
-    "Plan a weekend research sprint on LangGraph.js checkpoints.";
+    "An AI DevOps agent wants to rotate the production AI API key and deploy a new model version to the Production Model API.";
 
   const checkpointer = createMemoryCheckpointer();
   const agent = agentGraph.compile({ checkpointer });
