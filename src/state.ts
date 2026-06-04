@@ -6,6 +6,14 @@ export type PendingApprovalState = {
   approved: boolean;
   planText: string;
   message?: string;
+  fidoChallenge?: {
+    challengeId: string;
+    requiredUserPresence: boolean;
+    requiredUserVerification: boolean;
+    authenticatorType: string;
+    expiresAt: string;
+    verified: boolean;
+  };
 } | null;
 
 export const AgentState = Annotation.Root({

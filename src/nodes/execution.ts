@@ -50,11 +50,15 @@ export async function executionNode(
     action: "Rotate production AI API key and deploy model version",
     status: "APPROVED_AND_EXECUTED",
     details: {
-      approvalMethod: "Simulated human approval",
+      approvalMethod: "Simulated FIDO/WebAuthn human approval",
       securityGateway: "FIDO-Guard",
       riskLevel: "High",
       environment: "Production",
       targetResource: "Production Model API",
+      fidoRequired: true,
+      fidoUserPresenceRequired: true,
+      fidoUserVerificationRequired: true,
+      fidoVerified: true,  
     },
   });
 

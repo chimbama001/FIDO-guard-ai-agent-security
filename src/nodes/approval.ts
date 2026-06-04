@@ -1,5 +1,6 @@
 import type { AgentStateType } from "../state.js";
 import { getLastHumanText, isApprovalPhrase } from "./utils.js";
+import { generateFidoChallenge, verifyFidoChallenge } from "../fidoChallenge.js";
 
 /**
  * Confirms approval from the latest user message when a plan is pending.
@@ -12,21 +13,46 @@ export async function approvalNode(
   if (!pending?.planText) {
     return { currentStep: "approval" };
   }
-  if (pending.approved) {
-    return { currentStep: "execution" };
-  }
+ if (pending.approved && pending.fidoChallenge?.verified) {
+  return { currentStep: "execution" };
+}
 
   const last = getLastHumanText(state.messages);
-  if (last && isApprovalPhrase(last)) {
+
+ if (last && isApprovalPhrase(last)) {
+  const fidoChallenge = generateFidoChallenge();
+  const fidoVerified = verifyFidoChallenge(fidoChallenge, last);
+  console.log("FIDO/WebAuthn challenge generated:", fidoChallenge);
+  console.log("FIDO/WebAuthn verification result:", fidoVerified);
+
+  if (!fidoVerified) {
     return {
       pendingApproval: {
         ...pending,
-        approved: true,
-        message: "Plan approved.",
+        approved: false,
+        message: "FIDO/WebAuthn challenge failed or expired. Approval denied.",
       },
-      currentStep: "execution",
+      currentStep: "approval",
     };
   }
+
+  return {
+    pendingApproval: {
+      ...pending,
+      approved: true,
+      message: "Plan approved after simulated FIDO/WebAuthn verification.",
+      fidoChallenge: {
+        challengeId: fidoChallenge.challengeId,
+        requiredUserPresence: fidoChallenge.requiredUserPresence,
+        requiredUserVerification: fidoChallenge.requiredUserVerification,
+        authenticatorType: fidoChallenge.authenticatorType,
+        expiresAt: fidoChallenge.expiresAt,
+        verified: true,
+      },
+    },
+    currentStep: "execution",
+  };
+}
 
   return {
     pendingApproval: {
