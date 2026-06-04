@@ -7,6 +7,7 @@ import {
   getLastHumanText,
 } from "./utils.js";
 import { writeAuditLog } from "../auditLogger.js";
+import { generateSecurityDecisionReport } from "../securityDecisionReport.js";
 
 export async function executionNode(
   state: AgentStateType
@@ -16,34 +17,33 @@ export async function executionNode(
   const latestHuman = getLastHumanText(state.messages) ?? "";
   const model = getChatModel(0.3);
 
-  let body: string;
+    let body: string;
+
   if (model) {
     const res = await model.invoke([
       new HumanMessage({
-        content: `Execute this plan for the user. Be concise.\n\nPlan:\n${plan}\n\nOriginal user request:\n${originalAsk}\n\nLatest message (may be approval only):\n${latestHuman}`,
+        content: `Execute this plan for the user. Be concise.\n\nPlan:\n${plan}\n\nOriginal user request:\n${originalAsk}\n\nLatest message:\n${latestHuman}`,
       }),
     ]);
+
     const c = res.content;
     body = typeof c === "string" ? c : JSON.stringify(c);
   } else {
-   body = [
-  "## FIDO-Guard Execution Result",
-  "",
-  "**Status:** Approved and executed",
-  "**Action:** Rotate production AI API key and deploy new model version",
-  "**Target Resource:** Production Model API",
-  "**Approval Gate:** Passed",
-  "**Required Authentication:** FIDO2 security key or passkey",
-  "**Approver Role:** Cloud Admin",
-  "**Audit Status:** Logged",
-  "",
-  "The AI-agent action was executed only after verified human approval.",
-  "",
-  "In the final version, this approval step will require a phishing-resistant FIDO2/WebAuthn challenge before `approved` can become `true`.",
-  "",
-  "_FIDO-Guard mock execution mode._",
-].join("\n");
+    body = generateSecurityDecisionReport({
+      originalRequest:
+        "An AI DevOps agent wants to rotate the production AI API key and deploy a new model version to the Production Model API.",
+      requestedAction: "Rotate production AI API key and deploy new model version",
+      targetResource: "Production Model API",
+      riskLevel: "Critical",
+      requiredApprover: "Cloud Admin",
+      requiredAuthentication: "FIDO2/WebAuthn passkey or security key",
+      approvalStatus: "Verified",
+      fidoVerified: true,
+      executionStatus: "Approved and executed",
+      auditStatus: "Logged",
+    });
   }
+
   writeAuditLog({
     eventType: "AI_AGENT_ACTION",
     actor: "FIDO-Guard AI DevOps Agent",
