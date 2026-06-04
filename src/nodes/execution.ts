@@ -6,6 +6,7 @@ import {
   getFirstHumanText,
   getLastHumanText,
 } from "./utils.js";
+import { writeAuditLog } from "../auditLogger.js";
 
 export async function executionNode(
   state: AgentStateType
@@ -43,6 +44,19 @@ export async function executionNode(
   "_FIDO-Guard mock execution mode._",
 ].join("\n");
   }
+  writeAuditLog({
+    eventType: "AI_AGENT_ACTION",
+    actor: "FIDO-Guard AI DevOps Agent",
+    action: "Rotate production AI API key and deploy model version",
+    status: "APPROVED_AND_EXECUTED",
+    details: {
+      approvalMethod: "Simulated human approval",
+      securityGateway: "FIDO-Guard",
+      riskLevel: "High",
+      environment: "Production",
+      targetResource: "Production Model API",
+    },
+  });
 
   return {
     messages: [executionMessage(body)],
