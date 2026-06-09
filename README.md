@@ -1,212 +1,247 @@
-# langgraph-ts-workflow
+# FIDO-Guard: Human-Verified Security Gateway for AI-Agent Actions
 
-**LangGraph.js stateful agent workflows with checkpoints**  
-Clone → `npm install` → `npm run dev` → graph-based orchestration.
+FIDO-Guard is a TypeScript and LangGraph-based security workflow prototype that prevents high-risk AI-agent actions from executing automatically. The project simulates a DevOps AI agent attempting to perform a sensitive production action, then requires human approval and a simulated FIDO2/WebAuthn verification step before execution is allowed.
 
-[![TypeScript](https://img.shields.io/badge/TypeScript-5.8-blue.svg)](https://www.typescriptlang.org/)
-[![LangGraph.js](https://img.shields.io/badge/LangGraph.js-1.2-3178C6)](https://langchain-ai.github.io/langgraphjs/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Node.js](https://img.shields.io/badge/Node.js-20+-green)](https://nodejs.org/)
+This project demonstrates how human-in-the-loop security controls can be added to AI-agent workflows to reduce the risk of unauthorized, unsafe, or unverified automated actions.
 
 ---
 
-## What is this?
+## Problem Statement
 
-`langgraph-ts-workflow` is a **production-ready TypeScript starter** for building stateful, multi-step AI agents using [LangGraph.js](https://langchain-ai.github.io/langgraphjs/) — a low-level orchestration framework for controllable, graph-based AI workflows.
+AI agents are increasingly being used to automate operational tasks such as deployment, credential rotation, infrastructure changes, and security workflows. However, some actions are too sensitive to allow without human verification.
 
-Unlike simple function chains, real-world agents need **branching logic, persistent memory, and human oversight**. LangGraph models your agent as a **directed graph**: each node performs work (call an LLM, validate a plan, execute), edges define flow, and state accumulates at every step.
+Examples of high-risk AI-agent actions include:
 
-**Good fits:**
+* Rotating production API keys
+* Deploying a new production model version
+* Modifying cloud infrastructure
+* Changing identity and access controls
+* Executing privileged DevOps tasks
 
-- Multi-step research pipelines (plan → review → execute)
-- Human-in-the-loop approval (plan → approve → run)
-- Long-running tasks with **checkpoint persistence** across invocations
-- Prototypes that must run **without an API key** (deterministic mock LLM)
-
----
-
-## Features
-
-| Feature | Description |
-|--------|-------------|
-| **Graph state machine** | Nodes: `planning` → `approval` → `execution` with conditional routing to `END` until approved. |
-| **Checkpoint persistence** | `MemorySaver` in development; swap for Sqlite/Postgres/Redis in production. |
-| **Two-turn demo** | First message creates a plan; second message with **approve** (or standalone **yes**) resumes the same `thread_id` and runs execution. |
-| **Full TypeScript** | `Annotation.Root` state with typed reducers. |
-| **Offline-friendly** | Without `OPENAI_API_KEY`, planning and execution use clear mock outputs. |
+FIDO-Guard addresses this problem by requiring a human-verified approval gate before an AI agent can execute a critical action.
 
 ---
 
-## Installation
+## Project Scenario
+
+In this prototype, an AI DevOps agent requests permission to:
+
+> Rotate the production AI API key and deploy a new model version to the Production Model API.
+
+FIDO-Guard classifies this as a critical-risk action because it affects production secrets and a production model endpoint.
+
+The AI agent is not allowed to execute automatically. The workflow requires:
+
+1. Security planning and risk classification
+2. Human approval
+3. Simulated FIDO2/WebAuthn verification
+4. Execution only after approval is verified
+5. Audit logging
+6. Final security decision report generation
+
+---
+
+## Security Workflow
+
+```text
+AI-agent action request
+        ↓
+Planning node reviews the request
+        ↓
+Risk is classified as Critical
+        ↓
+Approval node requires human approval
+        ↓
+Simulated FIDO/WebAuthn challenge is generated
+        ↓
+FIDO/WebAuthn verification succeeds
+        ↓
+Execution node performs the approved action
+        ↓
+Audit log is written
+        ↓
+Security decision report is generated
+```
+
+---
+
+## Features Completed
+
+| Feature                           |   Status | Description                                                                    |
+| --------------------------------- | -------: | ------------------------------------------------------------------------------ |
+| LangGraph workflow                | Complete | Uses planning, approval, and execution nodes                                   |
+| Human-in-the-loop approval        | Complete | Requires an approval phrase before execution                                   |
+| Simulated FIDO/WebAuthn challenge | Complete | Generates a challenge and verifies approval                                    |
+| Audit logging                     | Complete | Writes approved AI-agent actions to `audit-log.json`                           |
+| Security decision report          | Complete | Produces a final report describing risk, approval, execution, and audit status |
+| GitHub version control            | Complete | Project is committed and pushed to GitHub                                      |
+
+---
+
+## Project Architecture
+
+```text
+src/
+├── index.ts                    # Main workflow entry point
+├── state.ts                    # LangGraph state definition
+├── model.ts                    # Chat model configuration
+├── utils.ts                    # Helper functions
+├── auditLogger.ts              # Writes audit events to audit-log.json
+├── fidoChallenge.ts            # Generates and verifies simulated FIDO/WebAuthn challenges
+├── securityDecisionReport.ts   # Generates the final security decision report
+└── nodes/
+    ├── planning.ts             # Reviews the AI-agent action request
+    ├── approval.ts             # Handles approval and FIDO verification
+    └── execution.ts            # Executes approved actions and writes audit logs
+```
+
+---
+
+## Audit Logging
+
+FIDO-Guard writes approved execution events to:
+
+```text
+audit-log.json
+```
+
+This file is intentionally excluded from GitHub using `.gitignore` because audit logs may contain sensitive security activity.
+
+Example audit event:
+
+```json
+{
+  "eventType": "AI_AGENT_ACTION",
+  "actor": "FIDO-Guard AI DevOps Agent",
+  "action": "Rotate production AI API key and deploy model version",
+  "status": "APPROVED_AND_EXECUTED",
+  "details": {
+    "approvalMethod": "Simulated FIDO/WebAuthn human approval",
+    "securityGateway": "FIDO-Guard",
+    "riskLevel": "High",
+    "environment": "Production",
+    "targetResource": "Production Model API",
+    "fidoRequired": true,
+    "fidoUserPresenceRequired": true,
+    "fidoUserVerificationRequired": true,
+    "fidoVerified": true
+  }
+}
+```
+
+---
+
+## Security Decision Report
+
+After successful approval and execution, FIDO-Guard generates a final security decision report.
+
+Example output:
+
+```md
+## FIDO-Guard Security Decision Report
+
+**Original Request:** An AI DevOps agent wants to rotate the production AI API key and deploy a new model version to the Production Model API.
+**Requested Action:** Rotate production AI API key and deploy new model version
+**Target Resource:** Production Model API
+
+### Security Classification
+**Risk Level:** Critical
+**Policy Decision:** Block automatic execution
+**Required Approver:** Cloud Admin
+**Required Authentication:** FIDO2/WebAuthn passkey or security key
+
+### Approval Verification
+**Approval Status:** Verified
+**FIDO/WebAuthn Verified:** Yes
+
+### Execution Outcome
+**Execution Status:** Approved and executed
+**Audit Status:** Logged
+
+### Final Decision
+The AI-agent action was allowed only after verified human approval using a simulated FIDO/WebAuthn challenge.
+```
+
+---
+
+## How to Run Locally
+
+### 1. Clone the repository
 
 ```bash
-cd langgraph-ts-workflow
+git clone https://github.com/chimbama001/FIDO-guard-ai-agent-security.git
+cd FIDO-guard-ai-agent-security
+```
+
+### 2. Install dependencies
+
+```bash
 npm install
 ```
 
-Requires **Node.js 20+**.
-
----
-
-## Quick start
-
-### 1. Environment
-
-```bash
-cp .env.example .env.local
-# Edit .env.local — set OPENAI_API_KEY for live LLM calls
-```
-
-### 2. Run the demo CLI
+### 3. Run the workflow
 
 ```bash
 npm run dev
 ```
 
-Optional: `npm run dev -- --thread my-user-id` to set the checkpoint `thread_id`.  
-The demo sends two turns automatically: a planning request, then an approval message.
-
-### 3. Build and run compiled output
-
-```bash
-npm run build
-npm start
-```
-
-`npm start` runs `node dist/index.js`. A **`prestart`** hook runs **`npm run build`** automatically, so a plain `npm start` after clone still works (omit `prestart` in your fork if you prefer not to rebuild each time).
-
-### Scripts reference
-
-| Script | Purpose |
-|--------|---------|
-| `npm run dev` | Run the CLI with **tsx** (no build). |
-| `npm run build` | Emit **`dist/`** with **tsc**. |
-| `npm start` | **`prestart`** → build, then **`node dist/index.js`**. |
-| `npm test` | Vitest: utils, graph, checkpoint (no API key). |
-| `npm run test:watch` | Vitest in watch mode. |
-| `npm run test:integration` | Live OpenAI path (skipped without `OPENAI_API_KEY`). |
-| `npm run test:checkpoint` | Checkpoint listing smoke test only. |
-
 ---
 
-## Architecture
+## Current Limitations
 
-```
-User message
-     │
-     ▼
-┌─────────────────────────────────────────────────────────────┐
-│                   StateGraph (LangGraph)                    │
-│  ┌──────────┐    ┌──────────┐    ┌──────────┐    ┌───────┐  │
-│  │ Planning │───▶│ Approval │───▶│ Execution│───▶│  END  │  │
-│  └──────────┘    └──────────┘    └──────────┘    └───────┘  │
-│                       │ (conditional)                     │
-│                       └──────────▶ END (not approved)      │
-└─────────────────────────────────────────────────────────────┘
-```
+This is a prototype. The current FIDO/WebAuthn step is simulated in TypeScript and does not yet connect to a browser-based passkey, platform authenticator, or physical security key.
 
-- **`planning`** — Produces a markdown plan (OpenAI if configured, else mock). If a plan already exists from a prior checkpoint and the new user message is clearly an approval, it marks the plan approved without re-planning.
-- **`approval`** — Routes to `execution` only when `pendingApproval.approved` is true.
-- **`execution`** — Final response; clears `pendingApproval` (the reducer treats **`null` as an explicit clear**, not “keep previous”).
+The current implementation proves the security workflow pattern:
 
-Checkpoints are keyed by `configurable.thread_id` so the same conversation can continue across process restarts when using a durable checkpointer.
-
----
-
-## API notes
-
-### Compile with a checkpointer
-
-```typescript
-import { MemorySaver } from "@langchain/langgraph";
-import { agentGraph } from "./workflows/agent.js";
-
-const agent = agentGraph.compile({ checkpointer: new MemorySaver() });
-await agent.invoke(input, { configurable: { thread_id: "user-123" } });
-```
-
-### State (`src/state.ts`)
-
-- **`messages`** — Appended via reducer (`HumanMessage` / `AIMessage`).
-- **`pendingApproval`** — `{ approved, planText, message? } | null`; return **`null`** from a node to clear pending approval (the channel reducer uses `undefined` to mean “no update” and `null` to mean “clear”).
-- **`currentStep`** — `"planning" | "approval" | "execution" | "done"` for observability.
-
-### LLM wiring
-
-OpenAI is configured in **`src/nodes/model.ts`** (`getChatModel`). Planning uses temperature `0.2`, execution `0.3`. Without `OPENAI_API_KEY`, nodes use deterministic mock text.
-
-**Execution** passes the **first** human message in state as the original user goal (and the **latest** human message separately), so a second turn that only says “approve” does not replace the task for the model or the mock output.
-
----
-
-## Docker (Ollama)
-
-```bash
-docker compose up -d ollama
-```
-
-This exposes Ollama on `http://localhost:11434`. To use it from this repo, add [`ChatOllama`](https://js.langchain.com/docs/integrations/chat/ollama) in `src/nodes/planning.ts` / `execution.ts` (optional extension — not wired by default).
-
----
-
-## Testing
-
-Vitest loads **`.env.local`** / **`.env`** via `tests/setup.ts` (same idea as the CLI), so `OPENAI_API_KEY` in a local env file is visible to **`npm run test:integration`**.
-
-```bash
-npm test                 # unit + graph + checkpoint (no API key)
-npm run test:integration # live OpenAI test (skipped if OPENAI_API_KEY unset)
-npm run test:checkpoint  # checkpoint listing smoke test
+```text
+High-risk AI action → human approval → simulated FIDO verification → execution → audit log → security report
 ```
 
 ---
 
-## Project structure
+## Future Improvements
 
-```
-langgraph-ts-workflow/
-├── src/
-│   ├── state.ts              # Annotation.Root state
-│   ├── nodes/                # planning, approval, execution, model, utils
-│   ├── workflows/
-│   │   └── agent.ts          # StateGraph definition
-│   ├── checkpointers/
-│   │   └── memory.ts         # MemorySaver factory
-│   └── index.ts              # CLI demo
-├── tests/
-│   ├── setup.ts              # loads .env.local / .env for vitest
-│   ├── utils.test.ts
-│   ├── graph.test.ts
-│   ├── checkpoint.test.ts
-│   └── integration.test.ts   # live OpenAI (skipped without key)
-├── .env.example
-├── .gitignore
-├── docker-compose.yml
-├── LICENSE
-├── package.json
-├── tsconfig.json
-└── vitest.config.ts
-```
+Planned improvements include:
+
+* Add real WebAuthn/FIDO2 approval using SimpleWebAuthn
+* Add browser-based approval UI
+* Store audit logs in a secure database
+* Add policy rules for different AI-agent action types
+* Add role-based approval requirements
+* Add cryptographic signing for audit records
+* Add dashboard view for approval history
+* Add denial workflow for failed or expired FIDO challenges
 
 ---
 
-## Troubleshooting
+## Security Value
 
-| Issue | What to try |
-|-------|-------------|
-| `npm start` fails with missing `dist/` | Run `npm run build`, or use plain `npm start` (runs `prestart` → build). |
-| Integration test always skipped | Set `OPENAI_API_KEY` in `.env.local` / `.env` or the shell; vitest loads those files in `tests/setup.ts`. |
-| Approval ignored on first message | Long prompts that contain “yes” are intentionally not treated as approval; use **approve** / **proceed** or a standalone **yes**. |
+FIDO-Guard demonstrates an important AI security control: AI agents should not be allowed to perform privileged production actions without verified human approval.
 
----
+This aligns with security principles such as:
 
-## Resources
-
-- [LangGraph.js documentation](https://langchain-ai.github.io/langgraphjs/)
-- [LangGraph graph API](https://docs.langchain.com/oss/javascript/langgraph/graph-api)
+* Least privilege
+* Human-in-the-loop authorization
+* Strong authentication
+* Auditability
+* Separation of duties
+* Controlled execution of high-risk actions
 
 ---
 
-## License
+## Tech Stack
 
-MIT — see [LICENSE](./LICENSE).
+* TypeScript
+* Node.js
+* LangGraph.js
+* LangChain
+* GitHub
+* Simulated FIDO2/WebAuthn challenge flow
+
+---
+
+## Author
+
+**Kirk Chimbama**
+Cybersecurity Student
+GitHub: [chimbama001](https://github.com/chimbama001)
