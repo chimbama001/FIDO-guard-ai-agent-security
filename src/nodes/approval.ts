@@ -1,9 +1,10 @@
-import type { AgentStateType } from "../state.js";
+import type { AgentStateType, PendingApprovalState } from "../state.js";
 import { getLastHumanText } from "./utils.js";
 import {
   generateFidoChallenge,
   verifyFidoChallenge,
 } from "../fidoChallenge.js";
+import { writeAuditLog } from "../auditLogger.js";
 
 const approvalPhrases = ["approve", "approved", "yes", "proceed", "authorize"];
 const denialPhrases = ["deny", "denied", "reject", "no", "block"];
@@ -13,12 +14,45 @@ function includesAnyPhrase(text: string, phrases: string[]): boolean {
   return phrases.some((phrase) => normalized.includes(phrase));
 }
 
+function logBlockedAction(
+  status: string,
+  reason: string,
+  pending?: PendingApprovalState
+): void {
+  writeAuditLog({
+    eventType: "AI_AGENT_ACTION_BLOCKED",
+    actor: "FIDO-Guard AI DevOps Agent",
+    action:
+      pending?.planText ??
+      "Rotate production AI API key and deploy model version",
+    status,
+    details: {
+      securityGateway: "FIDO-Guard",
+      reason,
+      riskLevel: "Critical",
+      environment: "Production",
+      targetResource: "Production Model API",
+      requiredApproverRole: pending?.requiredApproverRole ?? "Cloud Admin",
+      approved: false,
+      denied: pending?.denied ?? false,
+      executionBlocked: true,
+      fidoRequired: true,
+      fidoVerified: pending?.fidoVerified ?? false,
+    },
+  });
+}
+
 export async function approvalNode(
   state: AgentStateType
 ): Promise<Partial<AgentStateType>> {
   const pending = state.pendingApproval;
 
   if (!pending) {
+    logBlockedAction(
+      "BLOCKED_NO_PENDING_APPROVAL",
+      "No pending approval request exists."
+    );
+
     return {
       currentStep: "approval",
       pendingApproval: {
@@ -38,6 +72,15 @@ export async function approvalNode(
   const userDenied = includesAnyPhrase(latestHumanText, denialPhrases);
 
   if (userDenied) {
+    const denialReason =
+      "Human reviewer denied or blocked the AI-agent action.";
+
+    logBlockedAction("DENIED_BY_HUMAN_REVIEWER", denialReason, {
+      ...pending,
+      denied: true,
+      fidoVerified: false,
+    });
+
     return {
       pendingApproval: {
         ...pending,
@@ -46,7 +89,7 @@ export async function approvalNode(
         executionBlocked: true,
         fidoVerified: false,
         actualApproverRole: "Human Reviewer",
-        denialReason: "Human reviewer denied or blocked the AI-agent action.",
+        denialReason,
         message: "AI-agent action denied by human reviewer. Execution blocked.",
       },
       currentStep: "approval",
@@ -59,6 +102,16 @@ export async function approvalNode(
     const fidoVerified = verifyFidoChallenge(fidoChallenge, latestHumanText);
 
     if (!fidoVerified) {
+      const denialReason =
+        fidoChallenge.failureReason ??
+        "FIDO/WebAuthn challenge failed or expired. Approval denied.";
+
+      logBlockedAction("BLOCKED_FIDO_VERIFICATION_FAILED", denialReason, {
+        ...pending,
+        denied: true,
+        fidoVerified: false,
+      });
+
       return {
         pendingApproval: {
           ...pending,
@@ -67,8 +120,7 @@ export async function approvalNode(
           executionBlocked: true,
           fidoVerified: false,
           actualApproverRole: "Human Reviewer",
-          denialReason:
-            "FIDO/WebAuthn challenge failed or expired. Approval denied.",
+          denialReason,
           message:
             "FIDO/WebAuthn challenge failed or expired. Execution blocked.",
           fidoChallenge: {
@@ -92,8 +144,7 @@ export async function approvalNode(
         executionBlocked: false,
         fidoVerified: true,
         actualApproverRole: pending.requiredApproverRole ?? "Cloud Admin",
-        message:
-          "Plan approved after simulated FIDO/WebAuthn verification.",
+        message: "Plan approved after simulated FIDO/WebAuthn verification.",
         fidoChallenge: {
           challengeId: fidoChallenge.challengeId,
           requiredUserPresence: fidoChallenge.requiredUserPresence,
@@ -106,6 +157,11 @@ export async function approvalNode(
       currentStep: "execution",
     };
   }
+
+  const pendingReason =
+    "Execution is blocked because verified human approval has not been completed.";
+
+  logBlockedAction("BLOCKED_PENDING_HUMAN_APPROVAL", pendingReason, pending);
 
   return {
     pendingApproval: {
