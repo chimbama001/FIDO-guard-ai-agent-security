@@ -45,4 +45,3 @@ export function verifyFidoChallenge(challenge: FidoChallenge, approvalText: stri
   ];
 
   return approvalPhrases.some((phrase) => normalizedApproval.includes(phrase));
-}
