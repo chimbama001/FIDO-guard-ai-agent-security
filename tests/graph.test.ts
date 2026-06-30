@@ -38,6 +38,8 @@ describe("agent graph", () => {
     expect(names).toContain("execution");
     const last = out.messages[out.messages.length - 1];
     const text = typeof last.content === "string" ? last.content : "";
-    expect(text).toContain("Research LangGraph");
+    expect(text).toContain("FIDO-Guard Security Decision Report");
+    expect(text).toContain("Approved and executed");
+    expect(text).toContain("FIDO/WebAuthn Verified");
   });
 });

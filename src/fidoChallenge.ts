@@ -1,47 +1,63 @@
-import crypto from "crypto";
+import { randomUUID } from "node:crypto";
 
-type FidoChallenge = {
+export type FidoChallenge = {
   challengeId: string;
   challenge: string;
   requiredUserPresence: boolean;
   requiredUserVerification: boolean;
   authenticatorType: string;
   expiresAt: string;
+  verified: boolean;
+  failureReason?: string;
 };
 
 export function generateFidoChallenge(): FidoChallenge {
-  const challengeId = crypto.randomUUID();
-  const challenge = crypto.randomBytes(32).toString("base64url");
-
   const expiresAt = new Date(Date.now() + 5 * 60 * 1000).toISOString();
 
   return {
-    challengeId,
-    challenge,
+    challengeId: randomUUID(),
+    challenge: randomUUID(),
     requiredUserPresence: true,
     requiredUserVerification: true,
     authenticatorType: "FIDO2/WebAuthn passkey or security key",
     expiresAt,
+    verified: false,
   };
 }
 
-export function verifyFidoChallenge(challenge: FidoChallenge, approvalText: string): boolean {
-  const isExpired = Date.now() > new Date(challenge.expiresAt).getTime();
+export function verifyFidoChallenge(
+  challenge: FidoChallenge,
+  approvalText: string
+): boolean {
+  const now = new Date();
+  const expirationTime = new Date(challenge.expiresAt);
 
-  if (isExpired) {
+  if (now > expirationTime) {
+    challenge.verified = false;
+    challenge.failureReason = "FIDO/WebAuthn challenge expired.";
     return false;
   }
 
-  const normalizedApproval = approvalText.trim().toLowerCase();
+  const normalizedApproval = approvalText.toLowerCase();
 
   const approvalPhrases = [
     "approve",
     "approved",
     "yes",
-    "ok",
     "proceed",
-    "please proceed",
-    "i approve",
+    "authorize",
   ];
 
-  return approvalPhrases.some((phrase) => normalizedApproval.includes(phrase));
+  const approved = approvalPhrases.some((phrase) =>
+    normalizedApproval.includes(phrase)
+  );
+
+  if (!approved) {
+    challenge.verified = false;
+    challenge.failureReason = "Approval phrase was missing.";
+    return false;
+  }
+
+  challenge.verified = true;
+  return true;
+}

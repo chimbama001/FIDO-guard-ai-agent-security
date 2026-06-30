@@ -1,63 +1,121 @@
 import type { AgentStateType } from "../state.js";
-import { getLastHumanText, isApprovalPhrase } from "./utils.js";
-import { generateFidoChallenge, verifyFidoChallenge } from "../fidoChallenge.js";
+import { getLastHumanText } from "./utils.js";
+import {
+  generateFidoChallenge,
+  verifyFidoChallenge,
+} from "../fidoChallenge.js";
 
-/**
- * Confirms approval from the latest user message when a plan is pending.
- * (Planning may already set `approved: true` when resuming with an approval phrase.)
- */
+const approvalPhrases = ["approve", "approved", "yes", "proceed", "authorize"];
+const denialPhrases = ["deny", "denied", "reject", "no", "block"];
+
+function includesAnyPhrase(text: string, phrases: string[]): boolean {
+  const normalized = text.toLowerCase();
+  return phrases.some((phrase) => normalized.includes(phrase));
+}
+
 export async function approvalNode(
   state: AgentStateType
 ): Promise<Partial<AgentStateType>> {
   const pending = state.pendingApproval;
-  if (!pending?.planText) {
-    return { currentStep: "approval" };
+
+  if (!pending) {
+    return {
+      currentStep: "approval",
+      pendingApproval: {
+        approved: false,
+        planText: "No pending approval request was found.",
+        message: "No pending approval request was found.",
+        executionBlocked: true,
+        denied: true,
+        denialReason: "No pending approval request exists.",
+      },
+    };
   }
- if (pending.approved && pending.fidoChallenge?.verified) {
-  return { currentStep: "execution" };
-}
 
-  const last = getLastHumanText(state.messages);
+  const latestHumanText = getLastHumanText(state.messages) ?? "";
 
- if (last && isApprovalPhrase(last)) {
-  const fidoChallenge = generateFidoChallenge();
-  const fidoVerified = verifyFidoChallenge(fidoChallenge, last);
-  console.log("FIDO/WebAuthn challenge generated:", fidoChallenge);
-  console.log("FIDO/WebAuthn verification result:", fidoVerified);
+  const userApproved = includesAnyPhrase(latestHumanText, approvalPhrases);
+  const userDenied = includesAnyPhrase(latestHumanText, denialPhrases);
 
-  if (!fidoVerified) {
+  if (userDenied) {
     return {
       pendingApproval: {
         ...pending,
         approved: false,
-        message: "FIDO/WebAuthn challenge failed or expired. Approval denied.",
+        denied: true,
+        executionBlocked: true,
+        fidoVerified: false,
+        actualApproverRole: "Human Reviewer",
+        denialReason: "Human reviewer denied or blocked the AI-agent action.",
+        message: "AI-agent action denied by human reviewer. Execution blocked.",
       },
       currentStep: "approval",
+    };
+  }
+
+  if (userApproved) {
+    const fidoChallenge = generateFidoChallenge();
+
+    const fidoVerified = verifyFidoChallenge(fidoChallenge, latestHumanText);
+
+    if (!fidoVerified) {
+      return {
+        pendingApproval: {
+          ...pending,
+          approved: false,
+          denied: true,
+          executionBlocked: true,
+          fidoVerified: false,
+          actualApproverRole: "Human Reviewer",
+          denialReason:
+            "FIDO/WebAuthn challenge failed or expired. Approval denied.",
+          message:
+            "FIDO/WebAuthn challenge failed or expired. Execution blocked.",
+          fidoChallenge: {
+            challengeId: fidoChallenge.challengeId,
+            requiredUserPresence: fidoChallenge.requiredUserPresence,
+            requiredUserVerification: fidoChallenge.requiredUserVerification,
+            authenticatorType: fidoChallenge.authenticatorType,
+            expiresAt: fidoChallenge.expiresAt,
+            verified: false,
+          },
+        },
+        currentStep: "approval",
+      };
+    }
+
+    return {
+      pendingApproval: {
+        ...pending,
+        approved: true,
+        denied: false,
+        executionBlocked: false,
+        fidoVerified: true,
+        actualApproverRole: pending.requiredApproverRole ?? "Cloud Admin",
+        message:
+          "Plan approved after simulated FIDO/WebAuthn verification.",
+        fidoChallenge: {
+          challengeId: fidoChallenge.challengeId,
+          requiredUserPresence: fidoChallenge.requiredUserPresence,
+          requiredUserVerification: fidoChallenge.requiredUserVerification,
+          authenticatorType: fidoChallenge.authenticatorType,
+          expiresAt: fidoChallenge.expiresAt,
+          verified: true,
+        },
+      },
+      currentStep: "execution",
     };
   }
 
   return {
     pendingApproval: {
       ...pending,
-      approved: true,
-      message: "Plan approved after simulated FIDO/WebAuthn verification.",
-      fidoChallenge: {
-        challengeId: fidoChallenge.challengeId,
-        requiredUserPresence: fidoChallenge.requiredUserPresence,
-        requiredUserVerification: fidoChallenge.requiredUserVerification,
-        authenticatorType: fidoChallenge.authenticatorType,
-        expiresAt: fidoChallenge.expiresAt,
-        verified: true,
-      },
-    },
-    currentStep: "execution",
-  };
-}
-
-  return {
-    pendingApproval: {
-      ...pending,
       approved: false,
+      denied: false,
+      executionBlocked: true,
+      fidoVerified: false,
+      message:
+        "Pending human approval. Execution is blocked until approval is verified.",
     },
     currentStep: "approval",
   };

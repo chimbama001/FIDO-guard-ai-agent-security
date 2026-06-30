@@ -6,6 +6,12 @@ export type PendingApprovalState = {
   approved: boolean;
   planText: string;
   message?: string;
+  requiredApproverRole?: string;
+  actualApproverRole?: string;
+  denied?: boolean;
+  denialReason?: string;
+  fidoVerified?: boolean;
+  executionBlocked?: boolean;
   fidoChallenge?: {
     challengeId: string;
     requiredUserPresence: boolean;
