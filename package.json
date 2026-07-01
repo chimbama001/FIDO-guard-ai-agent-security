@@ -8,6 +8,7 @@
   },
   "scripts": {
     "dev": "node ./node_modules/tsx/dist/cli.mjs src/index.ts",
+    "dashboard": "tsx src/dashboardServer.ts",
     "build": "node ./node_modules/typescript/bin/tsc -p tsconfig.json",
     "prestart": "npm run build",
     "start": "node dist/index.js",

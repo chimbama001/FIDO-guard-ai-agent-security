@@ -7,13 +7,10 @@ async function rotateProductionApiKey() {
 async function main() {
   const decision = await fidoGuardMiddleware({
     agentId: "devops-ai-agent-01",
-    requestedAction:
-      "Rotate production AI API key and deploy new model version",
-    targetResource: "Production Model API",
+    requestedAction: "Delete production database and rotate production API key",
+    targetResource: "Production Database",
     environment: "production",
-    riskLevel: "critical",
     requiredApproverRole: "Cloud Admin",
-    humanApprovalText: "No, deny this action",
   });
 
   console.log("FIDO-Guard decision:", decision);

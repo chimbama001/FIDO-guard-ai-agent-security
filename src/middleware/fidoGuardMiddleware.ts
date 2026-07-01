@@ -1,171 +1,69 @@
 import { writeAuditLog } from "../auditLogger.js";
-import {
-  generateFidoChallenge,
-  verifyFidoChallenge,
-} from "../fidoChallenge.js";
-
-export type RiskLevel = "low" | "medium" | "high" | "critical";
+import { assessActionRisk, type RiskLevel } from "../riskAssessment.js";
 
 export type FidoGuardActionRequest = {
   agentId: string;
   requestedAction: string;
   targetResource: string;
   environment: "development" | "staging" | "production";
-  riskLevel: RiskLevel;
+  riskLevel?: RiskLevel;
   requiredApproverRole?: string;
-  humanApprovalText?: string;
 };
 
 export type FidoGuardDecision = {
   allowed: boolean;
-  status:
-    | "ALLOWED_LOW_RISK"
-    | "ALLOWED_AFTER_VERIFIED_APPROVAL"
-    | "BLOCKED_PENDING_APPROVAL"
-    | "DENIED_BY_HUMAN_REVIEWER"
-    | "BLOCKED_FIDO_VERIFICATION_FAILED";
+  status: "ALLOWED_LOW_OR_MEDIUM_RISK" | "BLOCKED_HIGH_RISK_ACTION";
   reason: string;
+  riskLevel: RiskLevel;
+  riskReasons: string[];
+  matchedKeywords: string[];
   fidoVerified: boolean;
-  challengeId?: string;
 };
 
-const approvalPhrases = ["approve", "approved", "yes", "proceed", "authorize"];
-const denialPhrases = ["deny", "denied", "reject", "no", "block"];
-
-function includesAnyPhrase(text: string, phrases: string[]): boolean {
-  const normalized = text.toLowerCase();
-  return phrases.some((phrase) => normalized.includes(phrase));
-}
-
-function requiresHumanApproval(riskLevel: RiskLevel): boolean {
+function shouldBlockAction(riskLevel: RiskLevel): boolean {
   return riskLevel === "high" || riskLevel === "critical";
 }
 
 export async function fidoGuardMiddleware(
   request: FidoGuardActionRequest
 ): Promise<FidoGuardDecision> {
-  const approvalText = request.humanApprovalText ?? "";
+  const riskAssessment = assessActionRisk({
+    requestedAction: request.requestedAction,
+    targetResource: request.targetResource,
+    environment: request.environment,
+  });
 
-  if (!requiresHumanApproval(request.riskLevel)) {
+  const evaluatedRiskLevel = request.riskLevel ?? riskAssessment.riskLevel;
+
+  if (shouldBlockAction(evaluatedRiskLevel)) {
     const decision: FidoGuardDecision = {
-      allowed: true,
-      status: "ALLOWED_LOW_RISK",
-      reason: "Low or medium risk action does not require FIDO-Guard approval.",
+      allowed: false,
+      status: "BLOCKED_HIGH_RISK_ACTION",
+      reason:
+        "Action blocked because FIDO-Guard classified it as high or critical risk.",
+      riskLevel: evaluatedRiskLevel,
+      riskReasons: riskAssessment.reasons,
+      matchedKeywords: riskAssessment.matchedKeywords,
       fidoVerified: false,
     };
 
     writeAuditLog({
-      eventType: "AI_AGENT_ACTION_ALLOWED",
+      eventType: "AI_AGENT_ACTION_BLOCKED",
       actor: request.agentId,
       action: request.requestedAction,
       status: decision.status,
       details: {
         securityGateway: "FIDO-Guard Middleware",
         reason: decision.reason,
-        riskLevel: request.riskLevel,
+        riskLevel: decision.riskLevel,
+        riskReasons: decision.riskReasons,
+        matchedKeywords: decision.matchedKeywords,
         environment: request.environment,
         targetResource: request.targetResource,
+        requiredApproverRole: request.requiredApproverRole ?? "Cloud Admin",
         fidoRequired: false,
         fidoVerified: false,
-      },
-    });
-
-    return decision;
-  }
-
-  const humanDenied = includesAnyPhrase(approvalText, denialPhrases);
-
-  if (humanDenied) {
-    const decision: FidoGuardDecision = {
-      allowed: false,
-      status: "DENIED_BY_HUMAN_REVIEWER",
-      reason: "Human reviewer denied or blocked the AI-agent action.",
-      fidoVerified: false,
-    };
-
-    writeAuditLog({
-      eventType: "AI_AGENT_ACTION_BLOCKED",
-      actor: request.agentId,
-      action: request.requestedAction,
-      status: decision.status,
-      details: {
-        securityGateway: "FIDO-Guard Middleware",
-        reason: decision.reason,
-        riskLevel: request.riskLevel,
-        environment: request.environment,
-        targetResource: request.targetResource,
-        requiredApproverRole: request.requiredApproverRole ?? "Cloud Admin",
-        fidoRequired: true,
-        fidoVerified: false,
         executionBlocked: true,
-      },
-    });
-
-    return decision;
-  }
-
-  const humanApproved = includesAnyPhrase(approvalText, approvalPhrases);
-
-  if (!humanApproved) {
-    const decision: FidoGuardDecision = {
-      allowed: false,
-      status: "BLOCKED_PENDING_APPROVAL",
-      reason:
-        "Execution blocked because verified human approval has not been completed.",
-      fidoVerified: false,
-    };
-
-    writeAuditLog({
-      eventType: "AI_AGENT_ACTION_BLOCKED",
-      actor: request.agentId,
-      action: request.requestedAction,
-      status: decision.status,
-      details: {
-        securityGateway: "FIDO-Guard Middleware",
-        reason: decision.reason,
-        riskLevel: request.riskLevel,
-        environment: request.environment,
-        targetResource: request.targetResource,
-        requiredApproverRole: request.requiredApproverRole ?? "Cloud Admin",
-        fidoRequired: true,
-        fidoVerified: false,
-        executionBlocked: true,
-      },
-    });
-
-    return decision;
-  }
-
-  const fidoChallenge = generateFidoChallenge();
-  const fidoVerified = verifyFidoChallenge(fidoChallenge, approvalText);
-
-  if (!fidoVerified) {
-    const decision: FidoGuardDecision = {
-      allowed: false,
-      status: "BLOCKED_FIDO_VERIFICATION_FAILED",
-      reason:
-        fidoChallenge.failureReason ??
-        "FIDO/WebAuthn challenge failed or expired.",
-      fidoVerified: false,
-      challengeId: fidoChallenge.challengeId,
-    };
-
-    writeAuditLog({
-      eventType: "AI_AGENT_ACTION_BLOCKED",
-      actor: request.agentId,
-      action: request.requestedAction,
-      status: decision.status,
-      details: {
-        securityGateway: "FIDO-Guard Middleware",
-        reason: decision.reason,
-        riskLevel: request.riskLevel,
-        environment: request.environment,
-        targetResource: request.targetResource,
-        requiredApproverRole: request.requiredApproverRole ?? "Cloud Admin",
-        fidoRequired: true,
-        fidoVerified: false,
-        executionBlocked: true,
-        challengeId: fidoChallenge.challengeId,
       },
     });
 
@@ -174,11 +72,13 @@ export async function fidoGuardMiddleware(
 
   const decision: FidoGuardDecision = {
     allowed: true,
-    status: "ALLOWED_AFTER_VERIFIED_APPROVAL",
+    status: "ALLOWED_LOW_OR_MEDIUM_RISK",
     reason:
-      "Human approval and simulated FIDO/WebAuthn verification completed.",
-    fidoVerified: true,
-    challengeId: fidoChallenge.challengeId,
+      "Action allowed because FIDO-Guard classified it as low or medium risk.",
+    riskLevel: evaluatedRiskLevel,
+    riskReasons: riskAssessment.reasons,
+    matchedKeywords: riskAssessment.matchedKeywords,
+    fidoVerified: false,
   };
 
   writeAuditLog({
@@ -189,14 +89,14 @@ export async function fidoGuardMiddleware(
     details: {
       securityGateway: "FIDO-Guard Middleware",
       reason: decision.reason,
-      riskLevel: request.riskLevel,
+      riskLevel: decision.riskLevel,
+      riskReasons: decision.riskReasons,
+      matchedKeywords: decision.matchedKeywords,
       environment: request.environment,
       targetResource: request.targetResource,
-      requiredApproverRole: request.requiredApproverRole ?? "Cloud Admin",
-      fidoRequired: true,
-      fidoVerified: true,
+      fidoRequired: false,
+      fidoVerified: false,
       executionBlocked: false,
-      challengeId: fidoChallenge.challengeId,
     },
   });
 
