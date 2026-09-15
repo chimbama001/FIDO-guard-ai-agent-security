@@ -1,1 +1,117 @@
+# /workflows/status-report.yml
+#
+# Generates a STATUS.md badge/report for FIDO-Guard using REAL repo data:
+# last commit info, open issue count, and CI build/test status.
+# Runs twice a week. If nothing changed, STATUS.md still reflects the
+# current real state (not filler) — it only commits if the content changed.
 
+name: Status Report
+
+on:
+  schedule:
+    # Mondays and Thursdays at 13:00 UTC (~9am ET). Adjust as needed.
+    - cron: '0 13 * * 1,4'
+  workflow_dispatch: {}   # lets you trigger it manually too
+
+permissions:
+  contents: write
+
+jobs:
+  update-status:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # need full history for last-commit info
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run tests (capture pass/fail, don't hard-fail the job)
+        id: tests
+        run: |
+          if npm test -- --ci 2>&1 | tee test-output.log; then
+            echo "result=passing" >> "$GITHUB_OUTPUT"
+          else
+            echo "result=failing" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Gather real repo data
+        id: data
+        run: |
+          LAST_COMMIT_HASH=$(git log -1 --format=%h)
+          LAST_COMMIT_DATE=$(git log -1 --format=%cd --date=short)
+          LAST_COMMIT_MSG=$(git log -1 --format=%s)
+          COMMIT_COUNT_30D=$(git log --since="30 days ago" --oneline | wc -l | tr -d ' ')
+
+          echo "last_hash=$LAST_COMMIT_HASH" >> "$GITHUB_OUTPUT"
+          echo "last_date=$LAST_COMMIT_DATE" >> "$GITHUB_OUTPUT"
+          echo "last_msg=$LAST_COMMIT_MSG" >> "$GITHUB_OUTPUT"
+          echo "commits_30d=$COMMIT_COUNT_30D" >> "$GITHUB_OUTPUT"
+
+      - name: Get open issue count
+        id: issues
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const issues = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open'
+            });
+            // exclude PRs, which the issues API also returns
+            const realIssues = issues.data.filter(i => !i.pull_request);
+            core.setOutput('open_count', realIssues.length);
+
+      - name: Write STATUS.md
+        env:
+          LAST_HASH: ${{ steps.data.outputs.last_hash }}
+          LAST_DATE: ${{ steps.data.outputs.last_date }}
+          LAST_MSG: ${{ steps.data.outputs.last_msg }}
+          COMMITS_30D: ${{ steps.data.outputs.commits_30d }}
+          OPEN_ISSUES: ${{ steps.issues.outputs.open_count }}
+          TEST_RESULT: ${{ steps.tests.outputs.result }}
+        run: |
+          BADGE_COLOR="brightgreen"
+          if [ "$TEST_RESULT" = "failing" ]; then BADGE_COLOR="red"; fi
+
+          cat > STATUS.md << EOF
+          # FIDO-Guard — Project Status
+
+          ![build](https://img.shields.io/badge/build-${TEST_RESULT}-${BADGE_COLOR})
+          ![last updated](https://img.shields.io/badge/status_report-auto--generated-blue)
+
+          This file is generated automatically by [\`.github/workflows/status-report.yml\`](.github/workflows/status-report.yml)
+          twice a week. It reflects the real state of the repo at generation time — it is not a substitute
+          for commit history.
+
+          | Metric | Value |
+          |---|---|
+          | Last commit | \`$LAST_HASH\` — "$LAST_MSG" |
+          | Last commit date | $LAST_DATE |
+          | Commits in last 30 days | $COMMITS_30D |
+          | Open issues | $OPEN_ISSUES |
+          | Test/build status | $TEST_RESULT |
+          | Report generated | $(date -u +"%Y-%m-%d %H:%M UTC") |
+
+          ---
+          _Automated status reporting — part of FIDO-Guard's audit/accountability design._
+          EOF
+
+      - name: Commit if changed
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add STATUS.md
+          if git diff --cached --quiet; then
+            echo "No change in status — skipping commit."
+          else
+            git commit -m "chore: update automated status report"
+            git push
+          fi
